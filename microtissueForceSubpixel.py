@@ -22,7 +22,7 @@ app = Tk.Tk()
 app.title("Calculation of Microtissue Contractile Force")
 
 def selectDir():
-    global dirname, imNameList, imArray, canvas, img
+    global dirname, imNameList, imArray, canvas, img, i, j
     dirname = tkFileDialog.askdirectory(parent=app,initialdir="/",title='Please select a directory')
     
     tv.set(dirname)
@@ -33,28 +33,31 @@ def selectDir():
     imArray = numpy.asarray(im)
     img = Tk.PhotoImage(file=imName)
     canvas.create_image(0, 0, anchor="nw", image=img)
+    i = canvas.create_line(0, 0, 0, 0, fill="red")
+    j = canvas.create_line(0, 0, 0, 0, fill="red")
     canvas.bind("<Motion>", selectWindow)
     canvas.bind("<Button-1>", selectWindow2)
-    
+
+# button for select directory    
 button = Tk.Button(app, text='Select Directory', padx=5, pady=5, command=selectDir)
-#button.pack(side = "top", padx = 10, pady = 10)
 button.grid(row=0, column=0, padx=10, pady=10)
 
+# label displaying selected directory
 tv = Tk.StringVar() 
 label = Tk.Label(app, textvariable=tv, width=80, height=5)
-#label.pack(side = "top", padx = 10, pady = 10)
 label.grid(row=0, column=1, sticky="w")
 
+# canvas for selecting ROI on the image
 canvas = Tk.Canvas(app, width=canvas_width, height=canvas_height)
-#canvas.pack(side="top")
 canvas.grid(row=1, columnspan=2, pady=10)
 
+# calculate force
 def calculateForce():
     result = []
     n = len(imNameList)
     shift = numpy.zeros([n, 2])
     for i in range(0, n):
-        print "processing", i, "of", n
+        print "processing", i+1, "of", n
         im = Image.open(imNameList[i])
         imArray = numpy.asarray(im)
         imArray = imArray[y0:y1, x0:x1]
@@ -64,6 +67,7 @@ def calculateForce():
     time = numpy.arange(0, n)
     time = numpy.multiply(timeUnit, time)
     
+    plt.figure()
     plt.subplot(2, 2, 1)
     plt.plot(time, -shift[:,1], label = 'X')
     plt.plot(time, -shift[:,0], label = 'Y')
@@ -87,17 +91,13 @@ def calculateForce():
     plt.ylabel('Contractile force (mN)')
     plt.legend()
     
-    numpy.savetxt("force.csv", numpy.transpose([time, force_x, force_y]), fmt='%1.3f', delimiter='\t')
-
+    plt.savefig(dirname+"/force.png")
+    numpy.savetxt(dirname+"/force.csv", numpy.transpose([time, force_x, force_y]), fmt='%1.3f', delimiter='\t')
 
 buttonSubmit = Tk.Button(app, text='Start', padx=5, pady=5, command=calculateForce)
 buttonSubmit.grid(row=2, column=0, padx=10, pady=10)
 
-global i, j
-i = canvas.create_line(0, 0, 0, 0, fill="red")
-j = canvas.create_line(0, 0, 0, 0, fill="red")
-
-#function to be called when mouse is clicked
+# functions for selecting ROI
 def selectWindow(event):
     global x, y
     x, y = event.x,event.y
