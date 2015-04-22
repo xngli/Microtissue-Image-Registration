@@ -8,7 +8,6 @@ from skimage import feature
 canvas_width = 512
 canvas_height =256
 windowSize = 100
-global margin
 margin = 20
 timeUnit = 0.01
 scalebar = 500/80
@@ -18,6 +17,7 @@ L = 250e-6
 springConstant = E*R*R*R*R/(2*L*L*L)
 dirname = ''
 
+global app
 app = Tk.Tk()
 app.title("Calculation of Microtissue Contractile Force")
 
@@ -94,8 +94,11 @@ def calculateForce():
     plt.savefig(dirname+"/force.png")
     numpy.savetxt(dirname+"/force.csv", numpy.transpose([time, force_x, force_y]), fmt='%1.3f', delimiter='\t')
 
-buttonSubmit = Tk.Button(app, text='Start', padx=5, pady=5, command=calculateForce)
-buttonSubmit.grid(row=2, column=0, padx=10, pady=10)
+buttonStart = Tk.Button(app, text='Start', padx=5, pady=5, command=calculateForce)
+buttonStart.grid(row=2, column=0, padx=10, pady=10, sticky="w")
+
+buttonExit = Tk.Button(app, text='Exit', padx=5, pady=5, command=app.destroy)
+buttonExit.grid(row=2, column=1, padx=10, pady=10, sticky="e")
 
 # functions for selecting ROI
 def selectWindow(event):
@@ -123,6 +126,9 @@ def selectWindow2(event):
         canvas.create_line(x1, 0, x1, canvas_height-1, fill="blue")
         canvas.update();
         imWindow = imArray[y0:y1, x0:x1]
+        tag = False
+        canvas.unbind("<Motion>")
+        canvas.unbind("<Button-1>")
         
 Tk.mainloop()
 
