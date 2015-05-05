@@ -10,10 +10,10 @@ canvas_height =256
 windowSize = 100
 margin = 20
 timeUnit = 0.01
-scalebar = 500/80
+scalebar = 6.27
 E = 1e6
 R = 250e-6
-L = 250e-6
+L = 1000e-6
 springConstant = E*R*R*R*R/(2*L*L*L)
 dirname = ''
 
@@ -83,16 +83,18 @@ def calculateForce():
     plt.legend()
     
     plt.subplot(2, 2, 3)
-    force_x = -shift[:,1] * scalebar * springConstant / 1000
-    force_y = -shift[:,0] * scalebar * springConstant / 1000
+    force_x = -shift[:,1] * scalebar * springConstant
+    force_y = -shift[:,0] * scalebar * springConstant
+    force = numpy.sqrt(force_x * force_x + force_y * force_y)
     plt.plot(time, force_x, label = 'Fx')
     plt.plot(time, force_y, label = 'Fy')
+    plt.plot(time, force, label = 'F')
     plt.xlabel('Time (s)')
-    plt.ylabel('Contractile force (mN)')
+    plt.ylabel('Contractile force (uN)')
     plt.legend()
     
     plt.savefig(dirname+"/force.png")
-    numpy.savetxt(dirname+"/force.csv", numpy.transpose([time, force_x, force_y]), fmt='%1.3f', delimiter='\t')
+    numpy.savetxt(dirname+"/force.csv", numpy.transpose([time, force_x, force_y, force]), fmt='%1.3f', delimiter='\t')
 
 buttonStart = Tk.Button(app, text='Start', padx=5, pady=5, command=calculateForce)
 buttonStart.grid(row=2, column=0, padx=10, pady=10, sticky="w")
