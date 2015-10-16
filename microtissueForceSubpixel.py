@@ -1,9 +1,11 @@
 import sys, os, glob, numpy
 from PyQt4.QtCore import *
 from PyQt4.QtGui import *
-from PIL import Image
+from PIL import Image, ImageQt
 from skimage import feature
 import matplotlib.pyplot as plt
+import javabridge
+import bioformats
 
 image_width = 512
 image_height = 256
@@ -120,18 +122,30 @@ class AppForm(QMainWindow):
         return action
         
     def open_data(self):
-        file_formats = "*.gif"
+        file_formats = "*.nd2"
         self.file_name = QFileDialog.getOpenFileName(self,
                                                      'Select data file',
                                                      file_formats)
         self.dirname = os.path.dirname(self.file_name)
         if self.file_name:
-            print(self.file_name)
-            self.image = QPixmap(self.file_name);
+            print self.file_name
+#            javabridge.start_vm(class_path=bioformats.JARS)
+            self.reader = bioformats.ImageReader(self.file_name)
+            image_np = self.reader.read(z=0, t=10)  # discard the first 10 frames
+            image_np = image_np[:,:,1]
+            image_np = numpy.uint8((image_np - image_np.min())/image_np.ptp()*255.0)
+            image_q = QImage(image_np.data, 
+                             image_np.shape[1], 
+                             image_np.shape[0], 
+                             image_np.shape[1], 
+                             QImage.Format_Indexed8)
+            self.image_qc = image_q.convertToFormat(QImage.Format_RGB32)
+            self.image = QPixmap.fromImage(self.image_qc)
             self.canvas.setPixmap(self.image)
             self.canvas.show()
             self.label.setText(self.file_name)
-        
+#            javabridge.kill_vm()
+            
     def save_plot(self):
         file_formats = "PNG (*.png)|*.png"
         
@@ -150,8 +164,8 @@ class AppForm(QMainWindow):
         self.statusBar().showMessage('Opened data file %s' % self.file_name, 2000)
     
     def on_move(self, event):
-        if hasattr(self, 'file_name'):
-            self.image = QPixmap(self.file_name)
+        if hasattr(self, 'image_qc'):
+            self.image = QPixmap.fromImage(self.image_qc)
         else:
             self.image = QPixmap(image_width, image_height)
             self.image.fill(Qt.white)
@@ -215,41 +229,56 @@ class AppForm(QMainWindow):
         y0 = min(self.markers[0].y(), self.markers[1].y())
         y1 = max(self.markers[0].y(), self.markers[1].y())
         result = []
-        imNameList = glob.glob(self.dirname + '/*.gif')
-        n = len(imNameList)
-        shift = numpy.zeros([n, 2])
-        im = Image.open(imNameList[0])
-        imArray = numpy.asarray(im)
-        imWindow = imArray[y0:y1, x0:x1]
-        for i in range(0, n):
-            print("processing ", i+1, " of ", n)
-            im = Image.open(imNameList[i])
-            imArray = numpy.asarray(im)
-            imArray = imArray[y0:y1, x0:x1]
-            result = feature.register_translation(imWindow, imArray, upsample_factor=100)
-            shift[i] = result[0]
+        n = 500
+        shift = numpy.zeros([n-10, 2])
+        image_np = self.reader.read(z=0, t=10)  # discard the first 10 frames
+        image_np = image_np[:,:,1]
+        imWindow = image_np[y0:y1, x0:x1]
+        for i in range(10, n):
+            print 'processing %d of %d', i+1, n
+#            im = Image.open(imNameList[i])
+#            imArray = numpy.asarray(im)
+#            imArray = imArray[y0:y1, x0:x1]
+            image_np = self.reader.read(z=0, t=i)
+            image_np = image_np[:,:,1]
+            image_np = image_np[y0:y1, x0:x1]
+            result = feature.register_translation(imWindow, 
+                                                  image_np, 
+                                                  upsample_factor=100)
+            shift[i-10] = result[0]
         
-        time = numpy.arange(0, n)
+        time = numpy.arange(0, n-10)
         time = numpy.multiply(timeUnit, time)
+        
+        shift = -shift
+        x_min = min(shift[:,1])
+        index = numpy.where(shift[:,1] == x_min)
+        print index
+        index = index[0][0]
+        print index
+        shift[:,1] = shift[:,1] - x_min
+        shift[:,0] = shift[:,0] - shift[index,0]
         
         plt.figure()
         plt.subplot(2, 2, 1)
-        plt.plot(time, -shift[:,1], label = 'X')
-        plt.plot(time, -shift[:,0], label = 'Y')
+        print time.size
+        print shift.size
+        plt.plot(time, shift[:,1], label = 'X')
+        plt.plot(time, shift[:,0], label = 'Y')
         plt.xlabel('Time (s)')
         plt.ylabel('Displacement (Pixel)')
         plt.legend()
         
         plt.subplot(2, 2, 2)
-        plt.plot(time, -shift[:,1] * scalebar, label = 'X')
-        plt.plot(time, -shift[:,0] * scalebar, label = 'Y')
+        plt.plot(time, shift[:,1] * scalebar, label = 'X')
+        plt.plot(time, shift[:,0] * scalebar, label = 'Y')
         plt.xlabel('Time (s)')
         plt.ylabel('Displacement (um)')
         plt.legend()
         
         plt.subplot(2, 2, 3)
-        force_x = -shift[:,1] * scalebar * springConstant
-        force_y = -shift[:,0] * scalebar * springConstant
+        force_x = shift[:,1] * scalebar * springConstant
+        force_y = shift[:,0] * scalebar * springConstant
         force = numpy.sqrt(force_x * force_x + force_y * force_y)
         plt.plot(time, force_x, label = 'Fx')
         plt.plot(time, force_y, label = 'Fy')
@@ -264,10 +293,12 @@ class AppForm(QMainWindow):
                       fmt='%1.3f', delimiter='\t')
         
 def main():
+    javabridge.start_vm(class_path=bioformats.JARS)
     app = QApplication(sys.argv)
     form = AppForm()
     form.show()
     sys.exit(app.exec_())
+    javabridge.kill_vm()
 
 if __name__ == "__main__":
     main()
