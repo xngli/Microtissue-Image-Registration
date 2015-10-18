@@ -157,7 +157,7 @@ class AppForm(QMainWindow):
             self.statusBar().showMessage('Saved to %s' % path, 2000)
             
     def on_about(self):
-        msg = """Electrical signal analyzer for piezoelectric device
+        msg = """Python program for image registration
     
         """
         QMessageBox.about(self, "About the demo", msg.strip())
@@ -235,7 +235,7 @@ class AppForm(QMainWindow):
         image_np = image_np[:,:,1]
         imWindow = image_np[y0:y1, x0:x1]
         for i in range(10, n):
-            print 'processing %d of %d', i+1, n
+            self.statusBar().showMessage('Processing %d of %d' % (i-9, n-10))
 #            im = Image.open(imNameList[i])
 #            imArray = numpy.asarray(im)
 #            imArray = imArray[y0:y1, x0:x1]
