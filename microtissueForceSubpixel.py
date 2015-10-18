@@ -247,25 +247,25 @@ class AppForm(QMainWindow):
         shift = -shift
         x_min = min(shift[:,1])
         index = numpy.where(shift[:,1] == x_min)
-        print index
         index = index[0][0]
-        print index
         shift[:,1] = shift[:,1] - x_min
         shift[:,0] = shift[:,0] - shift[index,0]
         
         plt.figure()
         plt.subplot(2, 2, 1)
-        print time.size
-        print shift.size
-        plt.plot(time, shift[:,1], label = 'X')
-        plt.plot(time, shift[:,0], label = 'Y')
+        pixel_x = shift[:,1]
+        pixel_y = shift[:,0]
+        plt.plot(time, pixel_x, label = 'X')
+        plt.plot(time, pixel_y, label = 'Y')
         plt.xlabel('Time (s)')
         plt.ylabel('Displacement (Pixel)')
         plt.legend()
         
         plt.subplot(2, 2, 2)
-        plt.plot(time, shift[:,1] * scalebar, label = 'X')
-        plt.plot(time, shift[:,0] * scalebar, label = 'Y')
+        displacement_x = shift[:,1] * scalebar
+        displacement_y = shift[:,0] * scalebar
+        plt.plot(time, displacement_x, label = 'X')
+        plt.plot(time, displacement_y, label = 'Y')
         plt.xlabel('Time (s)')
         plt.ylabel('Displacement (um)')
         plt.legend()
@@ -283,8 +283,18 @@ class AppForm(QMainWindow):
         
         plt.savefig(self.file_name[0:-4] + "_force.png")
         numpy.savetxt(self.file_name[0:-4] + "_force.csv", 
-                      numpy.transpose([time, force_x, force_y, force]), 
-                      fmt='%1.3f', delimiter='\t')
+                      numpy.transpose([time, 
+                                       pixel_x, 
+                                       pixel_y, 
+                                       displacement_x, 
+                                       displacement_y, 
+                                       force_x, 
+                                       force_y, 
+                                       force]), 
+                      fmt='%1.3f', 
+                      delimiter='\t',
+                      header='t(s)\tpx\tpy\tx(um)\ty(um)\tfx(uN)\tfy(uN)\tf(uN)',
+                      comments='')
         
 def main():
     javabridge.start_vm(class_path=bioformats.JARS)
