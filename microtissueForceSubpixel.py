@@ -17,7 +17,6 @@ E = 1e6
 R = 250e-6
 L = 1000e-6
 springConstant = E*R*R*R*R/(2*L*L*L)
-dirname = ''
 
 class AppForm(QMainWindow):
     def __init__(self, parent=None):
@@ -129,7 +128,6 @@ class AppForm(QMainWindow):
         self.dirname = os.path.dirname(self.file_name)
         if self.file_name:
             print self.file_name
-#            javabridge.start_vm(class_path=bioformats.JARS)
             self.reader = bioformats.ImageReader(self.file_name)
             image_np = self.reader.read(z=0, t=10)  # discard the first 10 frames
             image_np = image_np[:,:,1]
@@ -144,7 +142,6 @@ class AppForm(QMainWindow):
             self.canvas.setPixmap(self.image)
             self.canvas.show()
             self.label.setText(self.file_name)
-#            javabridge.kill_vm()
             
     def save_plot(self):
         file_formats = "PNG (*.png)|*.png"
@@ -236,9 +233,6 @@ class AppForm(QMainWindow):
         imWindow = image_np[y0:y1, x0:x1]
         for i in range(10, n):
             self.statusBar().showMessage('Processing %d of %d' % (i-9, n-10))
-#            im = Image.open(imNameList[i])
-#            imArray = numpy.asarray(im)
-#            imArray = imArray[y0:y1, x0:x1]
             image_np = self.reader.read(z=0, t=i)
             image_np = image_np[:,:,1]
             image_np = image_np[y0:y1, x0:x1]
@@ -287,8 +281,8 @@ class AppForm(QMainWindow):
         plt.ylabel('Contractile force (uN)')
         plt.legend()
         
-        plt.savefig(self.dirname+"/force.png")
-        numpy.savetxt(self.dirname+"/force.csv", 
+        plt.savefig(self.file_name[0:-4] + "_force.png")
+        numpy.savetxt(self.file_name[0:-4] + "_force.csv", 
                       numpy.transpose([time, force_x, force_y, force]), 
                       fmt='%1.3f', delimiter='\t')
         
