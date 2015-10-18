@@ -1,9 +1,9 @@
-import sys, os, glob, numpy
+import sys, os, numpy
 from PyQt4.QtCore import *
 from PyQt4.QtGui import *
-from PIL import Image, ImageQt
 from skimage import feature
 import matplotlib.pyplot as plt
+from matplotlib.ticker import AutoMinorLocator 
 import javabridge
 import bioformats
 
@@ -251,49 +251,46 @@ class AppForm(QMainWindow):
         shift[:,1] = shift[:,1] - x_min
         shift[:,0] = shift[:,0] - shift[index,0]
         
-        plt.figure()
-        plt.subplot(2, 2, 1)
         pixel_x = shift[:,1]
         pixel_y = shift[:,0]
-        plt.plot(time, pixel_x, label = 'X')
-        plt.plot(time, pixel_y, label = 'Y')
-        plt.xlabel('Time (s)')
-        plt.ylabel('Displacement (Pixel)')
-        plt.legend()
+        pixel = numpy.sqrt(pixel_x * pixel_x + pixel_y * pixel_y)
         
-        plt.subplot(2, 2, 2)
         displacement_x = shift[:,1] * scalebar
         displacement_y = shift[:,0] * scalebar
+        displacement = numpy.sqrt(displacement_x * displacement_x + displacement_y * displacement_y)
+        
+        fig = plt.figure()
+        ax = fig.gca()
         plt.plot(time, displacement_x, label = 'X')
         plt.plot(time, displacement_y, label = 'Y')
+        plt.plot(time, displacement, label = 'Total')
+        ax.yaxis.set_minor_locator(AutoMinorLocator(5))
         plt.xlabel('Time (s)')
         plt.ylabel('Displacement (um)')
-        plt.legend()
+        plt.legend(loc='lower right')
+        plt.grid(which='minor', alpha=0.35)                                                
+        plt.grid(which='major', alpha=1)
+        plt.show()
         
-        plt.subplot(2, 2, 3)
         force_x = shift[:,1] * scalebar * springConstant
         force_y = shift[:,0] * scalebar * springConstant
         force = numpy.sqrt(force_x * force_x + force_y * force_y)
-        plt.plot(time, force_x, label = 'Fx')
-        plt.plot(time, force_y, label = 'Fy')
-        plt.plot(time, force, label = 'F')
-        plt.xlabel('Time (s)')
-        plt.ylabel('Contractile force (uN)')
-        plt.legend()
         
-        plt.savefig(self.file_name[0:-4] + "_force.png")
+        plt.savefig(self.file_name[0:-4] + "_force.png", dpi=300)
         numpy.savetxt(self.file_name[0:-4] + "_force.csv", 
                       numpy.transpose([time, 
                                        pixel_x, 
                                        pixel_y, 
+                                       pixel,
                                        displacement_x, 
                                        displacement_y, 
+                                       displacement,
                                        force_x, 
                                        force_y, 
                                        force]), 
                       fmt='%1.3f', 
                       delimiter='\t',
-                      header='t(s)\tpx\tpy\tx(um)\ty(um)\tfx(uN)\tfy(uN)\tf(uN)',
+                      header='t(s)\tpx\tpy\tp\tx(um)\ty(um)\ttotal(um)\tfx(uN)\tfy(uN)\tf(uN)',
                       comments='')
         
 def main():
