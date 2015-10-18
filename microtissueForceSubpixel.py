@@ -6,13 +6,13 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import AutoMinorLocator 
 import javabridge
 import bioformats
+from xml.etree import ElementTree as ETree
 
 image_width = 512
 image_height = 256
 windowSize = 100
 margin = 20
 timeUnit = 0.01
-scalebar = 6.27
 E = 1e6
 R = 250e-6
 L = 1000e-6
@@ -225,8 +225,16 @@ class AppForm(QMainWindow):
         x1 = max(self.markers[0].x(), self.markers[1].x())
         y0 = min(self.markers[0].y(), self.markers[1].y())
         y1 = max(self.markers[0].y(), self.markers[1].y())
+        
+        md = bioformats.get_omexml_metadata(self.file_name)
+        md = md.encode('utf-8')
+        mdroot = ETree.fromstring(md)
+        n = mdroot[1][3].attrib['SizeT']
+        n = int(float(n))  # number of frames
+        scalebar = mdroot[1][3].attrib['PhysicalSizeX'] 
+        scalebar = float(scalebar)
+        
         result = []
-        n = 500
         shift = numpy.zeros([n-10, 2])
         image_np = self.reader.read(z=0, t=10)  # discard the first 10 frames
         image_np = image_np[:,:,1]
