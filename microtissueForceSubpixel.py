@@ -1,21 +1,22 @@
-import sys, os, glob, numpy
+import sys, os, numpy
 from PyQt4.QtCore import *
 from PyQt4.QtGui import *
-from PIL import Image
 from skimage import feature
 import matplotlib.pyplot as plt
+from matplotlib.ticker import AutoMinorLocator 
+import javabridge
+import bioformats
+from xml.etree import ElementTree as ETree
 
 image_width = 512
 image_height = 256
 windowSize = 100
 margin = 20
 timeUnit = 0.01
-scalebar = 6.27
 E = 1e6
 R = 250e-6
 L = 1000e-6
 springConstant = E*R*R*R*R/(2*L*L*L)
-dirname = ''
 
 class AppForm(QMainWindow):
     def __init__(self, parent=None):
@@ -120,18 +121,28 @@ class AppForm(QMainWindow):
         return action
         
     def open_data(self):
-        file_formats = "*.gif"
+        file_formats = "*.nd2"
         self.file_name = QFileDialog.getOpenFileName(self,
                                                      'Select data file',
                                                      file_formats)
         self.dirname = os.path.dirname(self.file_name)
         if self.file_name:
-            print(self.file_name)
-            self.image = QPixmap(self.file_name);
+            print self.file_name
+            self.reader = bioformats.ImageReader(self.file_name)
+            image_np = self.reader.read(z=0, t=10)  # discard the first 10 frames
+            image_np = image_np[:,:,1]
+            image_np = numpy.uint8((image_np - image_np.min())/image_np.ptp()*255.0)
+            image_q = QImage(image_np.data, 
+                             image_np.shape[1], 
+                             image_np.shape[0], 
+                             image_np.shape[1], 
+                             QImage.Format_Indexed8)
+            self.image_qc = image_q.convertToFormat(QImage.Format_RGB32)
+            self.image = QPixmap.fromImage(self.image_qc)
             self.canvas.setPixmap(self.image)
             self.canvas.show()
             self.label.setText(self.file_name)
-        
+            
     def save_plot(self):
         file_formats = "PNG (*.png)|*.png"
         
@@ -143,15 +154,15 @@ class AppForm(QMainWindow):
             self.statusBar().showMessage('Saved to %s' % path, 2000)
             
     def on_about(self):
-        msg = """Electrical signal analyzer for piezoelectric device
+        msg = """Python program for image registration
     
         """
         QMessageBox.about(self, "About the demo", msg.strip())
         self.statusBar().showMessage('Opened data file %s' % self.file_name, 2000)
     
     def on_move(self, event):
-        if hasattr(self, 'file_name'):
-            self.image = QPixmap(self.file_name)
+        if hasattr(self, 'image_qc'):
+            self.image = QPixmap.fromImage(self.image_qc)
         else:
             self.image = QPixmap(image_width, image_height)
             self.image.fill(Qt.white)
@@ -214,60 +225,89 @@ class AppForm(QMainWindow):
         x1 = max(self.markers[0].x(), self.markers[1].x())
         y0 = min(self.markers[0].y(), self.markers[1].y())
         y1 = max(self.markers[0].y(), self.markers[1].y())
-        result = []
-        imNameList = glob.glob(self.dirname + '/*.gif')
-        n = len(imNameList)
-        shift = numpy.zeros([n, 2])
-        im = Image.open(imNameList[0])
-        imArray = numpy.asarray(im)
-        imWindow = imArray[y0:y1, x0:x1]
-        for i in range(0, n):
-            print("processing ", i+1, " of ", n)
-            im = Image.open(imNameList[i])
-            imArray = numpy.asarray(im)
-            imArray = imArray[y0:y1, x0:x1]
-            result = feature.register_translation(imWindow, imArray, upsample_factor=100)
-            shift[i] = result[0]
         
-        time = numpy.arange(0, n)
+        md = bioformats.get_omexml_metadata(self.file_name)
+        md = md.encode('utf-8')
+        mdroot = ETree.fromstring(md)
+        n = mdroot[1][3].attrib['SizeT']
+        n = int(float(n))  # number of frames
+        scalebar = mdroot[1][3].attrib['PhysicalSizeX'] 
+        scalebar = float(scalebar)
+        
+        result = []
+        shift = numpy.zeros([n-10, 2])
+        image_np = self.reader.read(z=0, t=10)  # discard the first 10 frames
+        image_np = image_np[:,:,1]
+        imWindow = image_np[y0:y1, x0:x1]
+        for i in range(10, n):
+            self.statusBar().showMessage('Processing %d of %d' % (i-9, n-10))
+            image_np = self.reader.read(z=0, t=i)
+            image_np = image_np[:,:,1]
+            image_np = image_np[y0:y1, x0:x1]
+            result = feature.register_translation(imWindow, 
+                                                  image_np, 
+                                                  upsample_factor=100)
+            shift[i-10] = result[0]
+        
+        time = numpy.arange(0, n-10)
         time = numpy.multiply(timeUnit, time)
         
-        plt.figure()
-        plt.subplot(2, 2, 1)
-        plt.plot(time, -shift[:,1], label = 'X')
-        plt.plot(time, -shift[:,0], label = 'Y')
-        plt.xlabel('Time (s)')
-        plt.ylabel('Displacement (Pixel)')
-        plt.legend()
+        shift = -shift
+        x_min = min(shift[:,1])
+        index = numpy.where(shift[:,1] == x_min)
+        index = index[0][0]
+        shift[:,1] = shift[:,1] - x_min
+        shift[:,0] = shift[:,0] - shift[index,0]
         
-        plt.subplot(2, 2, 2)
-        plt.plot(time, -shift[:,1] * scalebar, label = 'X')
-        plt.plot(time, -shift[:,0] * scalebar, label = 'Y')
+        pixel_x = shift[:,1]
+        pixel_y = shift[:,0]
+        pixel = numpy.sqrt(pixel_x * pixel_x + pixel_y * pixel_y)
+        
+        displacement_x = shift[:,1] * scalebar
+        displacement_y = shift[:,0] * scalebar
+        displacement = numpy.sqrt(displacement_x * displacement_x + displacement_y * displacement_y)
+        
+        fig = plt.figure()
+        ax = fig.gca()
+        plt.plot(time, displacement_x, label = 'X')
+        plt.plot(time, displacement_y, label = 'Y')
+        plt.plot(time, displacement, label = 'Total')
+        ax.yaxis.set_minor_locator(AutoMinorLocator(5))
         plt.xlabel('Time (s)')
         plt.ylabel('Displacement (um)')
-        plt.legend()
+        plt.legend(loc='lower right')
+        plt.grid(which='minor', alpha=0.35)                                                
+        plt.grid(which='major', alpha=1)
+        plt.show()
         
-        plt.subplot(2, 2, 3)
-        force_x = -shift[:,1] * scalebar * springConstant
-        force_y = -shift[:,0] * scalebar * springConstant
+        force_x = shift[:,1] * scalebar * springConstant
+        force_y = shift[:,0] * scalebar * springConstant
         force = numpy.sqrt(force_x * force_x + force_y * force_y)
-        plt.plot(time, force_x, label = 'Fx')
-        plt.plot(time, force_y, label = 'Fy')
-        plt.plot(time, force, label = 'F')
-        plt.xlabel('Time (s)')
-        plt.ylabel('Contractile force (uN)')
-        plt.legend()
         
-        plt.savefig(self.dirname+"/force.png")
-        numpy.savetxt(self.dirname+"/force.csv", 
-                      numpy.transpose([time, force_x, force_y, force]), 
-                      fmt='%1.3f', delimiter='\t')
+        plt.savefig(self.file_name[0:-4] + "_force.png", dpi=300)
+        numpy.savetxt(self.file_name[0:-4] + "_force.csv", 
+                      numpy.transpose([time, 
+                                       pixel_x, 
+                                       pixel_y, 
+                                       pixel,
+                                       displacement_x, 
+                                       displacement_y, 
+                                       displacement,
+                                       force_x, 
+                                       force_y, 
+                                       force]), 
+                      fmt='%1.3f', 
+                      delimiter='\t',
+                      header='t(s)\tpx\tpy\tp\tx(um)\ty(um)\ttotal(um)\tfx(uN)\tfy(uN)\tf(uN)',
+                      comments='')
         
 def main():
+    javabridge.start_vm(class_path=bioformats.JARS)
     app = QApplication(sys.argv)
     form = AppForm()
     form.show()
     sys.exit(app.exec_())
+    javabridge.kill_vm()
 
 if __name__ == "__main__":
     main()
