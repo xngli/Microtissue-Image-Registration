@@ -6,7 +6,8 @@ Website: www.xngli.com
 
 Requirements:
 
-1. Python 3.4
-
-2. scikit-image 0.11.2
-
+- Python 2.7
+- PyQt4
+- scikit-image 0.11.3
+- javabridge 1.0.11
+- python-bioformats 1.0.5
